@@ -152,13 +152,13 @@ func Serve(events Events, addr ...string) error {
 		var err error
 		if ln.network == "udp" {
 			if ln.opts.reusePort() {
-				ln.pconn, err = reuseport.ListenPacket(ln.network, ln.addr)
+				ln.pconn, err = reuseport.NewReusablePortPacketConn(ln.network, ln.addr)
 			} else {
 				ln.pconn, err = net.ListenPacket(ln.network, ln.addr)
 			}
 		} else {
 			if ln.opts.reusePort() {
-				ln.ln, err = reuseport.Listen(ln.network, ln.addr)
+				ln.ln, err = reuseport.NewReusablePortListener(ln.network, ln.addr)
 			} else {
 				ln.ln, err = net.Listen(ln.network, ln.addr)
 			}
@@ -172,7 +172,7 @@ func Serve(events Events, addr ...string) error {
 			ln.lnaddr = ln.ln.Addr()
 		}
 		if !stdlib {
-			if err := ln.system(); err != nil {
+			if err := ln.system(nil); err != nil {
 				return err
 			}
 		}

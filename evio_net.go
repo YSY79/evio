@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-type netConn struct {
+type NetConn struct {
 	id       int
 	wake     int64
 	conn     net.Conn
@@ -23,10 +23,12 @@ type netConn struct {
 	err      error
 }
 
-func (c *netConn) Read(p []byte) (n int, err error) {
+var AllConnections sync.Map
+func (c *NetConn) Read(p []byte) (n int, err error) {
 	return c.conn.Read(p)
 }
-func (c *netConn) Write(p []byte) (n int, err error) {
+
+func (c *NetConn) Write(p []byte) (n int, err error) {
 	if c.detached {
 		if len(c.outbuf) > 0 {
 			for len(c.outbuf) > 0 {
@@ -58,7 +60,7 @@ func (c *netConn) Write(p []byte) (n int, err error) {
 	}
 	return c.conn.Write(p)
 }
-func (c *netConn) Close() error {
+func (c *NetConn) Close() error {
 	return c.conn.Close()
 }
 
@@ -72,8 +74,8 @@ func servenet(events Events, lns []*listener) error {
 	var idc int64
 	var mu sync.Mutex
 	var cmu sync.Mutex
-	var idconn = make(map[int]*netConn)
-	var udpconn = make(map[udpaddr]*netConn)
+	//var idconn = make(map[int]*NetConn)
+	var udpconn = make(map[udpaddr]*NetConn)
 	var done int64
 	var shutdown func(err error)
 
@@ -88,10 +90,11 @@ func servenet(events Events, lns []*listener) error {
 		var packet [0xFFFF]byte
 		var cout []byte
 		var caction Action
-		c := &netConn{id: id, conn: conn}
-		cmu.Lock()
-		idconn[id] = c
-		cmu.Unlock()
+		c := &NetConn{id: id, conn: conn}
+		//cmu.Lock()
+		//idconn[id] = c
+		AllConnections.Store(id,c)
+		//cmu.Unlock()
 		if events.Opened != nil {
 			var out []byte
 			var opts Options
@@ -205,9 +208,11 @@ func servenet(events Events, lns []*listener) error {
 			}
 			continue
 		close:
-			cmu.Lock()
-			delete(idconn, c.id)
-			cmu.Unlock()
+			//cmu.Lock()
+			//delete(idconn, c.id)
+			//cmu.Unlock()
+			AllConnections.Delete(c.id)
+
 			mu.Lock()
 			if atomic.LoadInt64(&done) != 0 {
 				mu.Unlock()
@@ -258,15 +263,18 @@ func servenet(events Events, lns []*listener) error {
 
 	ctx := Server{
 		Wake: func(id int) bool {
-			cmu.Lock()
-			c := idconn[id]
-			cmu.Unlock()
+			//cmu.Lock()
+			//c := idconn[id]
+			//cmu.Unlock()
+			c,_:=AllConnections.Load(id)
+
 			if c == nil {
 				return false
 			}
-			atomic.StoreInt64(&c.wake, 1)
+
+			atomic.StoreInt64(&c.(*NetConn).wake, 1)
 			// force a quick wakeup
-			c.conn.SetDeadline(time.Time{}.Add(1))
+			c.(*NetConn).conn.SetDeadline(time.Time{}.Add(1))
 			return true
 		},
 		Dial: func(addr string, timeout time.Duration) int {
@@ -335,14 +343,20 @@ func servenet(events Events, lns []*listener) error {
 		var connids []connid
 		var udpids []int
 		cmu.Lock()
-		for id, conn := range idconn {
-			connids = append(connids, connid{conn.conn, id})
-		}
+		//for id, conn := range idconn {
+		//	connids = append(connids, connid{conn.conn, id})
+		//}
+		AllConnections.Range(func(id, conn interface{}) bool {
+			connids=append(connids,connid{conn.(*NetConn).conn,id.(int)})
+			return true
+		})
 		for _, c := range udpconn {
 			udpids = append(udpids, c.id)
 		}
-		idconn = make(map[int]*netConn)
-		udpconn = make(map[udpaddr]*netConn)
+		var maps sync.Map
+		//idconn = make(map[int]*NetConn)
+		AllConnections=maps
+		udpconn = make(map[udpaddr]*NetConn)
 		cmu.Unlock()
 		mu.Unlock()
 		sort.Slice(connids, func(i, j int) bool {
@@ -399,13 +413,13 @@ func servenet(events Events, lns []*listener) error {
 					}
 					var out []byte
 					var action Action
-					var c *netConn
+					var c *NetConn
 					mu.Lock()
 					c = udpconn[uaddr]
 					mu.Unlock()
 					if c == nil {
 						id := int(atomic.AddInt64(&idc, 1))
-						c = &netConn{id: id, udpaddr: addr}
+						c = &NetConn{id: id, udpaddr: addr}
 						mu.Lock()
 						udpconn[uaddr] = c
 						mu.Unlock()
