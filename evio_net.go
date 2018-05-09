@@ -23,7 +23,9 @@ type NetConn struct {
 	err      error
 }
 
-var AllConnections sync.Map
+var AllNetConns sync.Map
+
+
 func (c *NetConn) Read(p []byte) (n int, err error) {
 	return c.conn.Read(p)
 }
@@ -93,7 +95,7 @@ func servenet(events Events, lns []*listener) error {
 		c := &NetConn{id: id, conn: conn}
 		//cmu.Lock()
 		//idconn[id] = c
-		AllConnections.Store(id,c)
+		AllNetConns.Store(id,c)
 		//cmu.Unlock()
 		if events.Opened != nil {
 			var out []byte
@@ -211,7 +213,7 @@ func servenet(events Events, lns []*listener) error {
 			//cmu.Lock()
 			//delete(idconn, c.id)
 			//cmu.Unlock()
-			AllConnections.Delete(c.id)
+			AllNetConns.Delete(c.id)
 
 			mu.Lock()
 			if atomic.LoadInt64(&done) != 0 {
@@ -266,7 +268,7 @@ func servenet(events Events, lns []*listener) error {
 			//cmu.Lock()
 			//c := idconn[id]
 			//cmu.Unlock()
-			c,_:=AllConnections.Load(id)
+			c,_:=AllNetConns.Load(id)
 
 			if c == nil {
 				return false
@@ -346,7 +348,7 @@ func servenet(events Events, lns []*listener) error {
 		//for id, conn := range idconn {
 		//	connids = append(connids, connid{conn.conn, id})
 		//}
-		AllConnections.Range(func(id, conn interface{}) bool {
+		AllNetConns.Range(func(id, conn interface{}) bool {
 			connids=append(connids,connid{conn.(*NetConn).conn,id.(int)})
 			return true
 		})
@@ -355,7 +357,7 @@ func servenet(events Events, lns []*listener) error {
 		}
 		var maps sync.Map
 		//idconn = make(map[int]*NetConn)
-		AllConnections=maps
+		AllNetConns=maps
 		udpconn = make(map[udpaddr]*NetConn)
 		cmu.Unlock()
 		mu.Unlock()

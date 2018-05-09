@@ -14,7 +14,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/tidwall/evio/internal"
+	"github.com/YSY79/evio/internal"
 )
 
 func (ln *listener) close() {

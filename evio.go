@@ -172,7 +172,7 @@ func Serve(events Events, addr ...string) error {
 			ln.lnaddr = ln.ln.Addr()
 		}
 		if !stdlib {
-			if err := ln.system(nil); err != nil {
+			if err := ln.system(); err != nil {
 				return err
 			}
 		}
